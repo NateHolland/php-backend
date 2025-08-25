@@ -5,12 +5,12 @@ header("Content-Type: application/json; charset=UTF-8");
 
 // Handle the request
 $method = $_SERVER['REQUEST_METHOD'];
-$request_uri = $_SERVER['REQUEST_URI'];
+$path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
 require_once 'ShotQuality.php';
 
 // Simple routing
-if ($method === 'POST' && preg_match('/^\/upload\/?$/', $request_uri)) {
+if ($method === 'POST' && preg_match('/^\/upload\/?$/', $path)) {
     // Get the request body
     $data = json_decode(file_get_contents('php://input'), true);
 
@@ -130,6 +130,78 @@ if ($method === 'POST' && preg_match('/^\/upload\/?$/', $request_uri)) {
         ]);
         exit;
     }
+
+} elseif ($method === 'GET' && preg_match('/^\/shots\/?$/', $path)) {
+    // --- Parameter Validation ---
+    $requiredParams = ['userId', 'startTime', 'endTime'];
+    $missingParams = [];
+    foreach ($requiredParams as $param) {
+        if (!isset($_GET[$param])) {
+            $missingParams[] = $param;
+        }
+    }
+
+    if (!empty($missingParams)) {
+        http_response_code(400); // Bad Request
+        echo json_encode([
+            "message" => "Missing required query parameters.",
+            "missing" => $missingParams
+        ]);
+        exit;
+    }
+
+    $userId = $_GET['userId'];
+    $startTime = $_GET['startTime'];
+    $endTime = $_GET['endTime'];
+
+    if (!is_numeric($startTime) || !is_numeric($endTime)) {
+        http_response_code(400);
+        echo json_encode(["message" => "startTime and endTime must be numeric timestamps."]);
+        exit;
+    }
+
+    // --- Database Query ---
+    try {
+        $pdo = new PDO('sqlite:' . __DIR__ . '/database.sqlite');
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+        $sql = "SELECT id, arcQuality, shortQuality, longQuality, brick, timestamp
+                FROM shots
+                WHERE user_id = :user_id
+                  AND timestamp >= :startTime
+                  AND timestamp <= :endTime
+                ORDER BY timestamp DESC";
+
+        $stmt = $pdo->prepare($sql);
+
+        $stmt->bindValue(':user_id', $userId, PDO::PARAM_STR);
+        $stmt->bindValue(':startTime', (int)$startTime, PDO::PARAM_INT);
+        $stmt->bindValue(':endTime', (int)$endTime, PDO::PARAM_INT);
+
+        $stmt->execute();
+
+        $shots = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Convert 'brick' from 0/1 back to boolean for the JSON response
+        foreach ($shots as &$shot) {
+            if (isset($shot['brick'])) {
+                $shot['brick'] = (bool)$shot['brick'];
+            }
+        }
+
+
+        http_response_code(200); // OK
+        echo json_encode($shots);
+
+    } catch (PDOException $e) {
+        http_response_code(500); // Internal Server Error
+        echo json_encode([
+            "message" => "Failed to query database.",
+            "error" => $e->getMessage()
+        ]);
+        exit;
+    }
+
 
 } else {
     http_response_code(404);
