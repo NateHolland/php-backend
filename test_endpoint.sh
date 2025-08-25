@@ -8,6 +8,9 @@
 # 4. Run a series of curl commands to test the endpoint.
 # 5. Stop the PHP server.
 
+echo "--- Deleting old database file ---"
+rm -f database.sqlite
+
 echo "--- Initializing database ---"
 php database.php
 
@@ -15,10 +18,18 @@ echo -e "\n--- Seeding database with test data ---"
 sqlite3 database.sqlite <<EOF
 INSERT INTO users (id) VALUES ('testuser1');
 INSERT INTO users (id) VALUES ('testuser2');
+-- Made shot (brick=0)
 INSERT INTO shots (arcQuality, shortQuality, longQuality, brick, timestamp, user_id) VALUES (0.8, 0.9, 0.7, 0, 1672531200, 'testuser1');
+-- Missed shot (brick=1)
 INSERT INTO shots (arcQuality, shortQuality, longQuality, brick, timestamp, user_id) VALUES (0.7, 0.8, 0.6, 1, 1672617600, 'testuser1');
-INSERT INTO shots (arcQuality, shortQuality, longQuality, brick, timestamp, user_id) VALUES (0.6, 0.7, 0.5, 0, 1675209600, 'testuser1');
+-- Made shot (brick=null, qualities are good)
+INSERT INTO shots (arcQuality, shortQuality, longQuality, brick, timestamp, user_id) VALUES (0.5, 0.0, 0.0, null, 1672617602, 'testuser1');
+-- Missed shot (brick=null, shortQuality is bad)
+INSERT INTO shots (arcQuality, shortQuality, longQuality, brick, timestamp, user_id) VALUES (0.5, -0.2, 0.5, null, 1672617601, 'testuser1');
+-- Made shot for another user
 INSERT INTO shots (arcQuality, shortQuality, longQuality, brick, timestamp, user_id) VALUES (0.9, 0.8, 0.9, 0, 1672531200, 'testuser2');
+-- Made shot outside of time range
+INSERT INTO shots (arcQuality, shortQuality, longQuality, brick, timestamp, user_id) VALUES (0.6, 0.7, 0.5, 0, 1675209600, 'testuser1');
 EOF
 echo "Database seeded."
 
@@ -30,12 +41,12 @@ sleep 1
 
 echo -e "\n--- Running tests ---"
 
-echo -e "\nTest Case 1: Get all shots for testuser1 in a specific range (should return 2 shots)"
+echo -e "\nTest Case 1: Get all shots for testuser1 in a specific range (should return 4 shots)"
 curl "http://localhost:8000/shots?userId=testuser1&startTime=1672531200&endTime=1672704000"
 echo -e "\n"
 
-echo "Test Case 2: Get a subset of shots for testuser1 (should return 1 shot)"
-curl "http://localhost:8000/shots?userId=testuser1&startTime=1672617600&endTime=1672704000"
+echo "Test Case 2: Get only made shots for testuser1 (should return 2 shots)"
+curl "http://localhost:8000/shots?userId=testuser1&startTime=1672531200&endTime=1672704000&made=true"
 echo -e "\n"
 
 echo "Test Case 3: Get shots for testuser2 (should return 1 shot)"

@@ -169,8 +169,13 @@ if ($method === 'POST' && preg_match('/^\/upload\/?$/', $path)) {
                 FROM shots
                 WHERE user_id = :user_id
                   AND timestamp >= :startTime
-                  AND timestamp <= :endTime
-                ORDER BY timestamp DESC";
+                  AND timestamp <= :endTime";
+
+        if (isset($_GET['made']) && $_GET['made'] === 'true') {
+            $sql .= " AND (brick = 0 OR (brick IS NULL AND shortQuality > -0.1 AND longQuality > -0.3))";
+        }
+
+        $sql .= " ORDER BY timestamp DESC";
 
         $stmt = $pdo->prepare($sql);
 
