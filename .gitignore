@@ -1,0 +1,5 @@
+# Application-generated data
+shot_data.json
+
+# Dependencies managed by Composer
+/vendor/
